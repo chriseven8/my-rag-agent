@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+langchain
+langchain-openai
+langchain-community
+pypdf
+pgvector
+psycopg2-binary
+jieba
+pydantic-settings
+python-dotenv
+pytest
+httpx
+python-multipart
