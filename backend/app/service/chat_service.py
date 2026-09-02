@@ -1,3 +1,5 @@
+import asyncio
+
 from ..config import get_settings
 from ..models import ChatRequest, ChatResponse, EvidenceResult, Reference
 from ..retrieval.evidence import EvidenceGate
@@ -23,9 +25,10 @@ class ChatService:
             max_snippet_chars=self.settings.evidence_max_snippet_chars,
         )
 
-    def chat(self, request: ChatRequest) -> ChatResponse:
+    def _retrieve(self, query: str) -> tuple[str | None, list[Reference]]:
+        """跑双通道检索+证据门控。命中 → (组装好的 user prompt, 引用列表);无证据 → (None, [])。"""
         evidence_result = retrieve_pipeline(
-            request.query,
+            query,
             vector_channel=self.vector_channel,
             keyword_channel=self.keyword_channel,
             evidence_gate=self.evidence_gate,
@@ -34,11 +37,45 @@ class ChatService:
             keyword_top_k=self.settings.keyword_top_k,
         )
         if evidence_result.no_evidence:
+            return None, []
+        return self._build_user_prompt(query, evidence_result), self._build_references(evidence_result)
+
+    def chat(self, request: ChatRequest) -> ChatResponse:
+        user_prompt, references = self._retrieve(request.query)
+        if user_prompt is None:
             return ChatResponse(answer=NO_EVIDENCE_REPLY, references=[], no_evidence=True)
 
-        user_prompt = self._build_user_prompt(request.query, evidence_result)
         answer = self._call_llm(user_prompt)
-        return ChatResponse(answer=answer, references=self._build_references(evidence_result), no_evidence=False)
+        return ChatResponse(answer=answer, references=references, no_evidence=False)
+
+    async def stream_chat(self, request: ChatRequest):
+        """SSE 版问答:按事件产出 dict。delta={type,text};done={type,answer,references,no_evidence}。"""
+        user_prompt, references = self._retrieve(request.query)
+        if user_prompt is None:
+            yield {"type": "done", "answer": NO_EVIDENCE_REPLY, "references": [], "no_evidence": True}
+            return
+
+        if self.settings.llm_mock:
+            # mock:把占位回答分片吐出,模拟打字机
+            text = "（mock 回答）根据证据，相关内容如下：" + user_prompt.split("【证据】")[1][:80]
+            step = 12
+            for i in range(0, len(text), step):
+                await asyncio.sleep(0.03)
+                yield {"type": "delta", "text": text[i:i + step]}
+            yield {"type": "done", "answer": text, "references": [r.model_dump() for r in references], "no_evidence": False}
+            return
+
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
+        answer: list[str] = []
+        async for chunk in self.llm.astream(messages):
+            piece = getattr(chunk, "content", None) or ""
+            if piece:
+                answer.append(piece)
+                yield {"type": "delta", "text": piece}
+        yield {"type": "done", "answer": "".join(answer), "references": [r.model_dump() for r in references], "no_evidence": False}
 
     def _build_user_prompt(self, query: str, evidence_result: EvidenceResult) -> str:
         blocks = [

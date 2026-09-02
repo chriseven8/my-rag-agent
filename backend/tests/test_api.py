@@ -1,4 +1,5 @@
 import io
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -67,3 +68,56 @@ def test_upload_then_delete(client):
     doc_id = resp.json()["doc_id"]
     assert client.delete(f"/api/documents/{doc_id}").status_code == 200
     assert client.get(f"/api/documents/{doc_id}").status_code == 404
+
+
+def _parse_sse(text: str) -> list[dict]:
+    """把 text/event-stream 的 body 切成事件 JSON(data: 行)。"""
+    events = []
+    for block in text.split("\n\n"):
+        for line in block.splitlines():
+            if line.startswith("data: "):
+                payload = line[len("data: "):]
+                if payload == "[DONE]":
+                    continue
+                events.append(json.loads(payload))
+    return events
+
+
+def _upload_md(client, content: str) -> str:
+    resp = client.post(
+        "/api/documents/upload",
+        files={"file": ("手册.md", io.BytesIO(content.encode()), "text/markdown")},
+    )
+    doc_id = resp.json()["doc_id"]
+    for _ in range(20):
+        rec = client.get(f"/api/documents/{doc_id}").json()
+        if rec["status"] == "ready":
+            break
+    return doc_id
+
+
+def test_chat_stream_returns_deltas_then_done(client):
+    _upload_md(client, "# 第一章\n苹果 价格 是 3000 元")
+    resp = client.post("/api/chat/stream", json={"query": "苹果 价格"})
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    events = _parse_sse(resp.text)
+    deltas = [e for e in events if e.get("type") == "delta"]
+    dones = [e for e in events if e.get("type") == "done"]
+    assert deltas, "应至少有一个 delta"
+    assert len(dones) == 1
+    done = dones[0]
+    assert done["no_evidence"] is False
+    assert done["references"]
+    assert done["answer"].startswith("（mock 回答）")
+    # 打字机分片应能拼回完整回答
+    assert "".join(d["text"] for d in deltas) == done["answer"]
+
+
+def test_chat_stream_no_evidence_done(client):
+    resp = client.post("/api/chat/stream", json={"query": "完全不存在 的词"})
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+    assert [e.get("type") for e in events] == ["done"]
+    assert events[0]["no_evidence"] is True
+    assert events[0]["references"] == []
