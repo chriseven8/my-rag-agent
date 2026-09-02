@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from langchain_community.vectorstores import PGVector
-from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_openai import ChatOpenAI
 
 from .api import chat, documents
@@ -23,7 +22,7 @@ async def lifespan(app: FastAPI):
         connection_string=settings.pg_connection_string,
         embedding_function=embedder,
         collection_name="my_rag_chunks",
-        distance_strategy=DistanceStrategy.COSINE,
+        distance_strategy="cosine",
     )
     keyword_index = KeywordIndex(settings.sqlite_path)
     document_service = DocumentService(
