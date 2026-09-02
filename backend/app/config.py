@@ -32,6 +32,9 @@ class Settings(BaseSettings):
 
     llm_mock: bool = True
 
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    frontend_dist: str = str(PROJECT_ROOT / "frontend" / "dist")
+
     model_config = SettingsConfigDict(env_file=str(PROJECT_ROOT / ".env"), extra="ignore")
 
 
