@@ -41,6 +41,8 @@ cd backend && python -m pytest -v
 scripts/start-web.sh          # 起 pgvector → 构建前端 → 打开 http://127.0.0.1:9081
 ```
 
+Windows 不想开终端的话,直接**双击仓库根的 `start-web.bat`** 即可,它会自动开浏览器;关掉弹出的窗口就停止服务。
+
 **方式二 · 开发模式** — 前端 HMR,改代码即时生效:
 
 ```bash
