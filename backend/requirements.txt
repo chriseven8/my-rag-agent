@@ -4,6 +4,8 @@ langchain
 langchain-openai
 langchain-community
 pypdf
+python-docx
+openpyxl
 pgvector
 psycopg2-binary
 jieba
