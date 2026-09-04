@@ -9,6 +9,7 @@
 - **LangChain** 只做文档加载/切分/向量库/LLM 客户端
 - **retrieval/ 零 LangChain,纯手写**:vector_channel / keyword_channel / fusion(RRF, K=60) / evidence(预算+无证据短路)
 - **mock 模式默认开启**:`EMBEDDING_MOCK=true` + `LLM_MOCK=true` 时无 API key 也能全链路跑通;切真实模型前先删 PG 里旧的向量集合(`langchain_pg_embedding` 表)重建,避免维度不匹配
+- **支持的文档格式**:Markdown/纯文本(`.md/.txt`)、PDF(`.pdf`)、Word(`.docx`)、Excel(`.xlsx`)。只提取文字:Word 标题/表格、Excel 按 sheet 转成行文本;扫描件不做 OCR,PDF 不做版面还原
 
 ## 快速启动
 
@@ -22,7 +23,7 @@ uvicorn app.main:app --port 9081
 ## 验证
 
 ```bash
-python scripts/demo.py <你的文档.md>   # 例如: python scripts/demo.py README.md
+python scripts/demo.py <文档>   # 例: python scripts/demo.py README.md(支持 .md/.txt/.pdf/.docx/.xlsx)
 ```
 
 ## 测试
@@ -49,7 +50,7 @@ Windows 不想开终端的话,直接**双击仓库根的 `start-web.bat`** 即�
 scripts/start-web-dev.sh      # 打开 http://localhost:5173(Vite 自动把 /api 代理到 9081)
 ```
 
-体验路径:文档管理页上传 `.md` → 状态变「已就绪」→ 对话页提问 → 打字机流式回答 + `[1][2]` 引用展示;检索不到证据时返回占位说明。mock 模式回答为占位文本,仅验证链路。
+体验路径:文档管理页上传文档(.md/.txt/.pdf/.docx/.xlsx)→ 状态变「已就绪」→ 对话页提问 → 打字机流式回答 + `[1][2]` 引用展示;检索不到证据时返回占位说明。mock 模式回答为占位文本,仅验证链路。
 
 接入真实模型:在仓库根 `.env` 填 `OPENAI_API_KEY`,并把 `EMBEDDING_MOCK`/`LLM_MOCK` 置为 `false`(`.env.example` 可参考)。注意 mock ↔ 真实 embedding 切换后,需删除 PG 里旧的向量集合(`langchain_pg_embedding` 表)重建,否则维度不匹配。
 

@@ -92,12 +92,12 @@ onMounted(refresh)
       multiple
       :show-file-list="false"
       :http-request="handleUpload"
-      accept=".md,.txt"
+      accept=".md,.txt,.pdf,.docx,.xlsx"
     >
       <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
       <div class="el-upload__text">把文档拖到此处,或 <em>点击上传</em></div>
       <template #tip>
-        <div class="el-upload__tip">支持 Markdown / 纯文本(.md/.txt),上传后自动切分并入库。</div>
+        <div class="el-upload__tip">支持 Markdown / 纯文本 / PDF / Word / Excel(.md .txt .pdf .docx .xlsx),上传后自动切分并入库。</div>
       </template>
     </el-upload>
 
