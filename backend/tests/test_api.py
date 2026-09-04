@@ -121,3 +121,53 @@ def test_chat_stream_no_evidence_done(client):
     assert [e.get("type") for e in events] == ["done"]
     assert events[0]["no_evidence"] is True
     assert events[0]["references"] == []
+
+
+def _build_docx_bytes() -> bytes:
+    from docx import Document
+
+    buf = io.BytesIO()
+    doc = Document()
+    doc.add_heading("产品介绍", level=1)
+    doc.add_paragraph("苹果 价格 是 3000 元")
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def test_upload_docx_then_ready_and_chat(client):
+    resp = client.post(
+        "/api/documents/upload",
+        files={
+            "file": (
+                "说明书.docx",
+                io.BytesIO(_build_docx_bytes()),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert resp.status_code == 200
+    doc_id = resp.json()["doc_id"]
+    for _ in range(20):
+        rec = client.get(f"/api/documents/{doc_id}").json()
+        if rec["status"] != "processing":
+            break
+    assert rec["status"] == "ready"
+
+    body = client.post("/api/chat", json={"query": "苹果 价格"}).json()
+    assert body["no_evidence"] is False
+    assert body["references"]
+
+
+def test_upload_corrupt_pdf_marks_failed(client):
+    resp = client.post(
+        "/api/documents/upload",
+        files={"file": ("损坏.pdf", io.BytesIO(b"not a real pdf"), "application/pdf")},
+    )
+    assert resp.status_code == 200
+    doc_id = resp.json()["doc_id"]
+    for _ in range(20):
+        rec = client.get(f"/api/documents/{doc_id}").json()
+        if rec["status"] != "processing":
+            break
+    assert rec["status"] == "failed"
+    assert rec["error"]

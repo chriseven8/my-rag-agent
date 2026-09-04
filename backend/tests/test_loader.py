@@ -6,6 +6,8 @@ from openpyxl import Workbook
 from app.ingestion.loader import load_text
 from app.ingestion.splitter import split_sections
 
+FIXTURE_PDF = Path(__file__).resolve().parent / "fixtures" / "minimal.pdf"
+
 
 def _make_docx(path: Path) -> Path:
     """造一个带 1/2 级标题 + 正文 + 表格的 docx。"""
@@ -79,3 +81,7 @@ def test_xlsx_rows_section_path_is_sheet_name(tmp_path):
     sections = split_sections(text)
     hit = next(s for s in sections if "苹果 | 3000" in s[1])
     assert hit[0] == "库存"
+
+
+def test_pdf_fixture_extracts_text():
+    assert load_text(str(FIXTURE_PDF)) == "Hello RAG PDF"
