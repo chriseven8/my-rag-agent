@@ -7,8 +7,9 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 
-# 兼容 .docm:宏格式与无宏格式用同一套解析器
+# 兼容 .docm/.xlsm:宏格式与无宏格式用同一套解析器
 _DOCX_SUFFIXES = {".docx", ".docm"}
+_XLSX_SUFFIXES = {".xlsx", ".xlsm"}
 _MARKDOWN_SUFFIXES = {".md", ".markdown"}
 
 
@@ -17,6 +18,7 @@ def load_text(file_path: str, file_type: str = "") -> str:
 
     - .pdf  用 PyPDFLoader 提取文字
     - .docx 用 python-docx 顺序抽取(标题→markdown 层级,表格穿插其中)
+    - .xlsx 用 openpyxl 逐 sheet/行取值(sheet 名作为标题)
     - .md/.markdown 直接读原始内容;其余文本后缀走通用 TextLoader(保持原行为)
     """
     suffix = Path(file_path).suffix.lower()
@@ -24,6 +26,8 @@ def load_text(file_path: str, file_type: str = "") -> str:
         return _extract_pdf(file_path)
     if suffix in _DOCX_SUFFIXES:
         return _extract_docx(file_path)
+    if suffix in _XLSX_SUFFIXES:
+        return _extract_xlsx(file_path)
     if suffix in _MARKDOWN_SUFFIXES:
         with open(file_path, encoding="utf-8") as f:
             return f.read()
@@ -85,3 +89,33 @@ def _extract_docx(file_path: str) -> str:
         elif isinstance(block, Table):
             out.extend(line for line in _table_lines(block) if line.strip())
     return "\n".join(out)
+
+
+def _extract_xlsx(file_path: str) -> str:
+    from openpyxl import load_workbook
+
+    def sheet_lines(ws) -> list[str]:
+        """逐行取值;只在 sheet 有数据时才在其首行前输出 sheet 名标题。"""
+        lines: list[str] = []
+        heading_emitted = False
+        for row in ws.iter_rows(values_only=True):
+            cells = ["" if v is None else str(v).strip() for v in row]
+            while cells and not cells[-1]:
+                cells.pop()  # 裁掉行尾空列
+            if not cells:
+                continue
+            if not heading_emitted:
+                if ws.title.strip():
+                    lines.append(f"# {ws.title.strip()}")
+                heading_emitted = True
+            lines.append(" | ".join(cells))
+        return lines
+
+    wb = load_workbook(file_path, read_only=True, data_only=True)
+    try:
+        out: list[str] = []
+        for ws in wb.worksheets:
+            out.extend(sheet_lines(ws))
+        return "\n".join(out)
+    finally:
+        wb.close()  # 关掉 zip 句柄,否则 Windows 下删除文件会失败

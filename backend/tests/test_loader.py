@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from docx import Document
+from openpyxl import Workbook
 
 from app.ingestion.loader import load_text
 from app.ingestion.splitter import split_sections
@@ -46,3 +47,35 @@ def test_docx_plain_paragraph_without_heading(tmp_path):
     text = load_text(str(path))
     assert "只有一段普通文本 123" in text
     assert not text.lstrip().startswith("#")
+
+
+def _make_xlsx(path: Path) -> Path:
+    """造一个带数据 sheet「库存」和一个空 sheet「空表」的 xlsx。"""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "库存"
+    ws.append(["名称", "价格"])
+    ws.append(["苹果", 3000])
+    ws.append(["香蕉", None, None, None])  # 行尾空列应被裁掉
+    wb.create_sheet("空表")  # 无任何单元格
+    wb.save(path)
+    return path
+
+
+def test_xlsx_sheet_heading_values_and_trailing_trim(tmp_path):
+    path = _make_xlsx(tmp_path / "价目.xlsx")
+    text = load_text(str(path))
+    assert "# 库存" in text
+    assert "名称 | 价格" in text
+    assert "苹果 | 3000" in text
+    # 行尾空列被裁掉,不产出 "香蕉 |"
+    assert "香蕉 |" not in text
+    assert "空表" not in text  # 空 sheet 不产出标题行
+
+
+def test_xlsx_rows_section_path_is_sheet_name(tmp_path):
+    path = _make_xlsx(tmp_path / "价目.xlsx")
+    text = load_text(str(path))
+    sections = split_sections(text)
+    hit = next(s for s in sections if "苹果 | 3000" in s[1])
+    assert hit[0] == "库存"
