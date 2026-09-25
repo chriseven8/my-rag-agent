@@ -8,9 +8,9 @@ echo   my-rag-agent Web one-click launcher
 echo ==========================================
 echo.
 
-echo [1/3] start database container (docker compose up -d)...
-docker compose up -d
-if errorlevel 1 echo   NOTE: start Docker Desktop first if the above reports an error.
+echo [1/3] start database container and wait until ready...
+docker compose up -d --wait --wait-timeout 60
+if errorlevel 1 goto db_fail
 
 set "PY=%~dp0backend\.venv\Scripts\python.exe"
 if exist "%PY%" goto check_dist
@@ -18,11 +18,19 @@ if exist "%PY%" goto check_dist
 echo.
 echo [ERROR] backend venv python not found:
 echo   %PY%
-echo Run this setup once in git-bash:
-echo   cd /e/AI-Workspace/my-rag-agent
+echo Create it once - run these from the repo root (the folder holding this script):
 echo   cd backend
 echo   python -m venv .venv
-echo   ./.venv/Scripts/python -m pip install -r requirements.txt
+echo   .venv\Scripts\python -m pip install -r requirements.txt
+pause
+exit /b 1
+
+:db_fail
+echo.
+echo [ERROR] pgvector is not ready. Common causes:
+echo   1. Docker Desktop is not running - start it first, wait for the tray icon to turn green.
+echo   2. Port 5433 is already used by another Postgres on this machine.
+echo Re-run this script after starting Docker.
 pause
 exit /b 1
 

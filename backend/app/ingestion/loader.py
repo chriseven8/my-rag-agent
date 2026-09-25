@@ -13,7 +13,7 @@ _XLSX_SUFFIXES = {".xlsx", ".xlsm"}
 _MARKDOWN_SUFFIXES = {".md", ".markdown"}
 
 
-def load_text(file_path: str, file_type: str = "") -> str:
+def load_text(file_path: str) -> str:
     """把本地文件读成纯文本(按磁盘文件后缀分发)。
 
     - .pdf  用 PyPDFLoader 提取文字

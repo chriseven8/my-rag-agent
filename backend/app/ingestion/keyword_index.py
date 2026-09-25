@@ -4,7 +4,7 @@ import threading
 
 import jieba
 
-from ..models import Chunk, DocumentRecord, ScoredChunk
+from ..models import Chunk, DocumentRecord, DocumentStatus, ScoredChunk
 
 _STOPWORDS = {
     "的", "了", "是", "在", "和", "与", "及", "等", "中", "上", "下",
@@ -98,7 +98,6 @@ class KeywordIndex:
 
     @staticmethod
     def _row_to_record(row) -> DocumentRecord:
-        from ..models import DocumentStatus
         return DocumentRecord(
             doc_id=row["doc_id"],
             doc_name=row["doc_name"],

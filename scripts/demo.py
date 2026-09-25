@@ -9,12 +9,13 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from langchain_community.vectorstores import PGVector  # noqa: E402
-from langchain_openai import ChatOpenAI  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
 from app.embeddings import build_embedder  # noqa: E402
 from app.ingestion.indexer import index_document  # noqa: E402
 from app.ingestion.keyword_index import KeywordIndex  # noqa: E402
+from app.ingestion.loader import load_text  # noqa: E402
+from app.llm import build_llm  # noqa: E402
 from app.models import ChatRequest, DocumentRecord, DocumentStatus  # noqa: E402
 from app.retrieval.evidence import EvidenceGate  # noqa: E402
 from app.retrieval.keyword_channel import KeywordChannel  # noqa: E402
@@ -36,8 +37,7 @@ def main(file_path: str, db: str) -> None:
     )
 
     print(f"[2/4] 入库 {file_path} ...")
-    with open(file_path, encoding="utf-8") as f:
-        text = f.read()
+    text = load_text(file_path)
     doc_id = DocumentRecord.new_id()
     keyword_index.upsert_document(DocumentRecord(
         doc_id=doc_id,
@@ -51,6 +51,8 @@ def main(file_path: str, db: str) -> None:
         text=text,
         vector_store=vector_store,
         keyword_index=keyword_index,
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
     )
     print(f"      生成 {len(chunks)} 个 chunk")
 
@@ -59,12 +61,7 @@ def main(file_path: str, db: str) -> None:
     chat_service = ChatService(
         vector_channel=vec_ch,
         keyword_channel=kw_ch,
-        llm=ChatOpenAI(
-            model=settings.chat_model,
-            base_url=settings.openai_base_url,
-            api_key=settings.openai_api_key,
-            temperature=0.2,
-        ),
+        llm=build_llm(settings),
     )
 
     print("[3/4] 检索演示(双通道 + RRF):")
@@ -95,7 +92,7 @@ def main(file_path: str, db: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="my-rag-agent 全链路演示")
-    parser.add_argument("file", help="要入库的文档路径(txt/md/pdf)")
-    parser.add_argument("--db", default=None, help="覆盖 SQLite 路径(默认 :memory: 或 .env 的 sqlite_path)")
+    parser.add_argument("file", help="要入库的文档路径(md/txt/pdf/docx/xlsx)")
+    parser.add_argument("--db", default=None, help="覆盖 SQLite 路径(默认取 .env 的 sqlite_path)")
     args = parser.parse_args()
     main(args.file, args.db)
