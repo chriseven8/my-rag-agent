@@ -8,11 +8,20 @@ from ..models import DocumentRecord, DocumentStatus
 
 
 class DocumentService:
-    def __init__(self, upload_dir: str, vector_store, keyword_index: KeywordIndex):
+    def __init__(
+        self,
+        upload_dir: str,
+        vector_store,
+        keyword_index: KeywordIndex,
+        chunk_size: int = 800,
+        chunk_overlap: int = 120,
+    ):
         self.upload_dir = Path(upload_dir)
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.vector_store = vector_store
         self.keyword_index = keyword_index
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
 
     def _file_path(self, doc_id: str, doc_name: str) -> Path:
         return self.upload_dir / f"{doc_id}{Path(doc_name).suffix}"
@@ -34,13 +43,15 @@ class DocumentService:
             return
         try:
             path = self._file_path(rec.doc_id, rec.doc_name)
-            text = load_text(str(path), Path(rec.doc_name).suffix)
+            text = load_text(str(path))
             index_document(
                 doc_id=rec.doc_id,
                 doc_name=rec.doc_name,
                 text=text,
                 vector_store=self.vector_store,
                 keyword_index=self.keyword_index,
+                chunk_size=self.chunk_size,
+                chunk_overlap=self.chunk_overlap,
             )
             self.keyword_index.upsert_document(
                 DocumentRecord(**{**rec.model_dump(), "status": DocumentStatus.READY, "error": None})

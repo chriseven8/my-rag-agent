@@ -1,76 +1,70 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Promotion } from '@element-plus/icons-vue'
 
 import { askStream } from '../api/client'
-import type { Reference } from '../types'
+import { useChat } from '../stores/chat'
+import type { ChatTurn } from '../types'
 
-interface Message {
-  role: 'user' | 'assistant'
-  text: string
-  refs: Reference[]
-  noEvidence: boolean
-  streaming: boolean
-}
-
-const messages = ref<Message[]>([])
-const input = ref('')
-const busy = ref(false)
+// 会话状态由 store 持有(切路由不丢),这里只负责渲染与滚动
+const { messages, input, busy, controller, pushMessage } = useChat()
 const listEl = ref<HTMLElement | null>(null)
-let controller: AbortController | null = null
-
-function pushMessage(role: Message['role']): Message {
-  const m: Message = { role, text: '', refs: [], noEvidence: false, streaming: false }
-  messages.value.push(m)
-  return m
-}
 
 async function scrollBottom(): Promise<void> {
   await nextTick()
   if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight
 }
 
+// 内容一变就跟随到底:推流逐字增长、以及换页回来恢复历史都靠它
+watch(messages, () => void scrollBottom(), { deep: true })
+onMounted(() => void scrollBottom())
+
 async function send(): Promise<void> {
   const query = input.value.trim()
   if (!query || busy.value) return
   input.value = ''
 
+  // 先把已有的对话作为历史(必须在把本次提问推进列表之前取,否则会重复)
+  const history: ChatTurn[] = messages.value
+    .filter((m) => m.text)
+    .map((m) => ({ role: m.role, content: m.text }))
+
+  pushMessage('user', query)
   const bot = pushMessage('assistant')
   bot.streaming = true
   busy.value = true
-  controller = new AbortController()
-  await scrollBottom()
+  controller.value = new AbortController()
 
   try {
     await askStream(
       query,
+      history,
       (text) => {
         bot.text += text
-        void scrollBottom()
       },
       (done) => {
         bot.streaming = false
         bot.noEvidence = done.no_evidence
         bot.text = done.answer
-        bot.refs = done.references
       },
-      controller.signal,
+      controller.value.signal,
     )
   } catch (e) {
     if ((e as Error).name !== 'AbortError') {
       ElMessage.error(`请求出错:${(e as Error).message}`)
     }
   } finally {
+    // 组件可能已在中途被卸载(切去了文档管理),这里读写的都是 store 里的共享状态,
+    // 不受组件卸载影响;滚动交给 watch,listEl 已销毁也无妨。
     bot.streaming = false
     busy.value = false
-    controller = null
-    await scrollBottom()
+    controller.value = null
   }
 }
 
 function stop(): void {
-  controller?.abort()
+  controller.value?.abort()
 }
 </script>
 
@@ -84,20 +78,9 @@ function stop(): void {
             {{ m.text }}
             <span v-if="m.streaming" class="caret">▍</span>
           </div>
-          <template v-if="m.role === 'assistant' && !m.streaming">
-            <div v-if="m.noEvidence" class="no-evidence">本次未检索到足够证据,未生成基于文档的回答。</div>
-            <div v-else-if="m.refs.length" class="refs">
-              <div class="ref-title">引用来源</div>
-              <el-card v-for="r in m.refs" :key="r.index" shadow="never" class="ref-card">
-                <div class="ref-head">
-                  <span class="ref-index">[{{ r.index }}]</span>
-                  <span class="ref-doc">{{ r.doc_name }}</span>
-                  <span class="ref-sec">{{ r.section_path || '全文' }}</span>
-                </div>
-                <div class="ref-snippet">{{ r.snippet }}</div>
-              </el-card>
-            </div>
-          </template>
+          <div v-if="m.role === 'assistant' && !m.streaming && m.noEvidence" class="no-evidence">
+            本次未检索到足够证据,未生成基于文档的回答。
+          </div>
         </div>
       </div>
       <div v-if="!messages.length" class="empty">
@@ -205,45 +188,6 @@ function stop(): void {
   margin-top: 8px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
-}
-.refs {
-  margin-top: 10px;
-  border-top: 1px dashed var(--el-border-color);
-  padding-top: 8px;
-}
-.ref-title {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin-bottom: 6px;
-}
-.ref-card {
-  margin-bottom: 6px;
-  background: var(--el-bg-color);
-}
-.ref-head {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  font-size: 12px;
-}
-.ref-index {
-  color: var(--el-color-primary);
-  font-weight: 600;
-}
-.ref-doc {
-  font-weight: 600;
-}
-.ref-sec {
-  color: var(--el-text-color-secondary);
-}
-.ref-snippet {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--el-text-color-regular);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 .composer {
   padding-top: 12px;

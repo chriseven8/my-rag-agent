@@ -16,6 +16,11 @@ export interface Reference {
   snippet: string
 }
 
+export interface ChatTurn {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface ChatDone {
   answer: string
   references: Reference[]

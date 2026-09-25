@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -23,8 +25,16 @@ class Reference(BaseModel):
     snippet: str
 
 
+class ChatTurn(BaseModel):
+    """对话历史的一轮。role 只允许 user/assistant —— 这是外部输入,不能放行 system。"""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     query: str
+    history: list[ChatTurn] = []
 
 
 class ChatResponse(BaseModel):

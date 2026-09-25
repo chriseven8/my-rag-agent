@@ -1,4 +1,4 @@
-import type { ChatDone, DocRecord } from '../types'
+import type { ChatDone, ChatTurn, DocRecord } from '../types'
 
 async function toJson<T>(resp: Response): Promise<T> {
   if (!resp.ok) {
@@ -35,10 +35,12 @@ export async function deleteDoc(docId: string): Promise<void> {
 
 /**
  * SSE 流式问答:后端经 POST /api/chat/stream 推送 "data: {...}" 事件,末尾 "event: end\ndata: [DONE]"。
+ * history 为之前的对话轮次,让模型能接上下文回答追问。
  * onDelta 收到打字机片段;onDone 收到最终结果(所有 delta 拼接 == done.answer)。
  */
 export async function askStream(
   query: string,
+  history: ChatTurn[],
   onDelta: (text: string) => void,
   onDone: (done: ChatDone) => void,
   signal?: AbortSignal,
@@ -46,7 +48,7 @@ export async function askStream(
   const resp = await fetch('/api/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, history }),
     signal,
   })
   if (!resp.ok || !resp.body) {

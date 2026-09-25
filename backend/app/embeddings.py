@@ -23,4 +23,7 @@ def build_embedder(settings) -> object:
         model=settings.embedding_model,
         base_url=settings.openai_base_url,
         api_key=settings.openai_api_key,
+        # 关掉本地 tiktoken 长度校验:DashScope 服务端自己分词,
+        # 且 tiktoken 需从 openaipublic 下载字典,网络不通时会直接报 SSLError。
+        check_embedding_ctx_length=False,
     )

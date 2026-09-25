@@ -5,12 +5,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from langchain_community.vectorstores import PGVector
-from langchain_openai import ChatOpenAI
 
 from .api import chat, documents
 from .config import get_settings
 from .embeddings import build_embedder
 from .ingestion.keyword_index import KeywordIndex
+from .llm import build_llm
 from .retrieval.keyword_channel import KeywordChannel
 from .retrieval.vector_channel import VectorChannel
 from .service.chat_service import ChatService
@@ -21,24 +21,33 @@ from .service.document_service import DocumentService
 async def lifespan(app: FastAPI):
     settings = get_settings()
     embedder = build_embedder(settings)
-    vector_store = PGVector(
-        connection_string=settings.pg_connection_string,
-        embedding_function=embedder,
-        collection_name="my_rag_chunks",
-        distance_strategy="cosine",
-    )
+    try:
+        vector_store = PGVector(
+            connection_string=settings.pg_connection_string,
+            embedding_function=embedder,
+            collection_name="my_rag_chunks",
+            distance_strategy="cosine",
+        )
+    except Exception as exc:
+        # 直接抛出 psycopg2 堆栈的话,「忘了启动 Docker」这件事被埋在 60 行 traceback 里
+        # 完全看不出来。换成一条能照做的提示,底层报错压成一行附在后面。
+        # (试过 raise SystemExit:反而把提示甩到堆栈之后,顺序更乱,不用。)
+        raise RuntimeError(
+            "无法连接向量库(pgvector)。请先启动 Docker Desktop,"
+            "然后在项目根目录执行: docker compose up -d --wait\n"
+            f"  (底层报错: {str(exc).splitlines()[0]})"
+        ) from None
     keyword_index = KeywordIndex(settings.sqlite_path)
     document_service = DocumentService(
-        upload_dir="data/uploads", vector_store=vector_store, keyword_index=keyword_index
+        upload_dir="data/uploads",
+        vector_store=vector_store,
+        keyword_index=keyword_index,
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
     )
     vector_channel = VectorChannel(vector_store, min_similarity=settings.vector_min_similarity)
     keyword_channel = KeywordChannel(keyword_index, relative_floor=settings.keyword_relative_score_floor)
-    llm = ChatOpenAI(
-        model=settings.chat_model,
-        base_url=settings.openai_base_url,
-        api_key=settings.openai_api_key,
-        temperature=0.2,
-    )
+    llm = build_llm(settings)
     chat_service = ChatService(
         vector_channel=vector_channel, keyword_channel=keyword_channel, llm=llm
     )

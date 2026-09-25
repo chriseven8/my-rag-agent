@@ -1,14 +1,17 @@
+import os
+
 import pytest
 
+# 测试必须离线且确定:.env 里切成真实模型后,Settings 仍会读它,
+# 因此这里在用 Settings 之前强制回 mock,避免测试去打真实 API。
+os.environ["EMBEDDING_MOCK"] = "true"
+os.environ["LLM_MOCK"] = "true"
 
-class FakeEmbedder:
-    """固定 8 维向量,零依赖,让测试不碰真实 embedding API。"""
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [[0.01] * 8 for _ in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        return [0.01] * 8
+# ChatOpenAI 在**构造时**就校验 api_key 非空(哪怕一个请求都不发),
+# 而 test_llm.py 只断言构造参数、不联网。纯净 clone 没有 .env,
+# openai_api_key 默认为 "",构造即抛 OpenAIError → 测试红。塞个假 key 兜住。
+# 这里用 setdefault:本地 .env 有真 key 时不去覆盖它。
+os.environ.setdefault("OPENAI_API_KEY", "test-key-not-used")
 
 
 class FakeVectorStore:
@@ -43,8 +46,3 @@ class FakeVectorStore:
 @pytest.fixture
 def vector_store():
     return FakeVectorStore()
-
-
-@pytest.fixture
-def embedder():
-    return FakeEmbedder()

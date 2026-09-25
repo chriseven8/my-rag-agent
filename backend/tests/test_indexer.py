@@ -2,7 +2,7 @@ from app.ingestion.indexer import index_document
 from app.ingestion.keyword_index import KeywordIndex
 
 
-def test_index_document_populates_both_stores(vector_store, embedder):
+def test_index_document_populates_both_stores(vector_store):
     idx = KeywordIndex(":memory:")
     chunks = index_document(
         doc_id="d1",
@@ -19,7 +19,7 @@ def test_index_document_populates_both_stores(vector_store, embedder):
     assert idx.bm25_search("退款") != []
 
 
-def test_index_embeds_with_section_path(vector_store, embedder):
+def test_index_embeds_with_section_path(vector_store):
     idx = KeywordIndex(":memory:")
     chunks = index_document(
         doc_id="d1", doc_name="手册.md", text="# 第一章\n退款规则",

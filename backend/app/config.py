@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     chunk_overlap: int = 120
 
     llm_mock: bool = True
+    llm_temperature: float = 0.5
+    # qwen3 系列默认开思考:正文之前先吐一大段 reasoning token,
+    # 实测首字延迟从 1.25s 涨到 8.6s,所以默认关掉。None = 不带该参数。
+    enable_thinking: bool | None = False
 
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     frontend_dist: str = str(PROJECT_ROOT / "frontend" / "dist")
